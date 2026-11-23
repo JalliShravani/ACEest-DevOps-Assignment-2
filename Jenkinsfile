@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -7,56 +8,79 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "aceest-fitness:${BUILD_NUMBER}"
+        IMAGE_NAME = "aceest-fitness"
+        DOCKERHUB_REPO = "shravanijalli/aceest-fitness"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                echo 'Checking out ACEest Fitness source code'
                 checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo 'Building versioned Docker image'
                 sh '''
                     docker build \
-                        -t "$IMAGE_NAME" \
-                        -t aceest-fitness:latest \
-                        .
+                      -t "$IMAGE_NAME:$BUILD_NUMBER" \
+                      -t "$IMAGE_NAME:latest" .
                 '''
             }
         }
 
         stage('Python Syntax Validation') {
             steps {
-                echo 'Validating Python source syntax'
                 sh '''
-                    docker run --rm "$IMAGE_NAME" \
-                        python -m compileall -q app.py tests
+                    docker run --rm "$IMAGE_NAME:$BUILD_NUMBER" \
+                      python -m compileall -q app.py tests
                 '''
             }
         }
 
         stage('Run Pytest in Container') {
             steps {
-                echo 'Running automated tests inside Docker'
                 sh '''
-                    docker run --rm "$IMAGE_NAME" \
-                        python -m pytest -v tests/
+                    docker run --rm "$IMAGE_NAME:$BUILD_NUMBER" \
+                      python -m pytest -v tests/
                 '''
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKERHUB_USER',
+                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKERHUB_TOKEN" | docker login \
+                          --username "$DOCKERHUB_USER" \
+                          --password-stdin
+
+                        docker tag "$IMAGE_NAME:$BUILD_NUMBER" \
+                          "$DOCKERHUB_REPO:v$BUILD_NUMBER"
+
+                        docker tag "$IMAGE_NAME:$BUILD_NUMBER" \
+                          "$DOCKERHUB_REPO:latest"
+
+                        docker push "$DOCKERHUB_REPO:v$BUILD_NUMBER"
+                        docker push "$DOCKERHUB_REPO:latest"
+
+                        docker logout
+                    '''
+                }
             }
         }
 
         stage('Archive Docker Image') {
             steps {
-                echo 'Saving Docker image as a Jenkins artifact'
                 sh '''
-                    docker save "$IMAGE_NAME" \
-                        -o "aceest-fitness-${BUILD_NUMBER}.tar"
+                    docker save "$IMAGE_NAME:$BUILD_NUMBER" \
+                      -o "aceest-fitness-${BUILD_NUMBER}.tar"
                 '''
 
                 archiveArtifacts(
@@ -69,13 +93,11 @@ pipeline {
 
     post {
         success {
-            echo 'ACEest Fitness CI pipeline completed successfully.'
+            echo 'ACEest Fitness CI/CD pipeline completed successfully.'
         }
-
         failure {
-            echo 'ACEest Fitness CI pipeline failed. Check the stage logs.'
+            echo 'Pipeline failed. Check the console output.'
         }
-
         always {
             echo 'Pipeline execution finished.'
         }
