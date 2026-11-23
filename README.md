@@ -182,3 +182,5 @@ The commit history records application development, Docker containerization, CI 
 ## 12. Limitations
 
 Client data is stored in memory rather than a persistent database. The data may reset when the application restarts. This project demonstrates the requested development and CI workflow rather than a production-ready data-storage solution.
+
+Jenkins CI/CD pipeline configured with automatic Git polling.
