@@ -1,15 +1,23 @@
-from app import app
+
+import pytest
+
+from app import create_app
 
 
-# Create a test client
-def get_test_client():
-    return app.test_client()
+@pytest.fixture
+def client(tmp_path):
+    database_path = tmp_path / "test_aceest.db"
+
+    test_app = create_app({
+        "TESTING": True,
+        "DATABASE": str(database_path)
+    })
+
+    with test_app.test_client() as test_client:
+        yield test_client
 
 
-# Test the home endpoint
-def test_home():
-    client = get_test_client()
-
+def test_home(client):
     response = client.get("/")
 
     assert response.status_code == 200
@@ -20,34 +28,21 @@ def test_home():
     assert data["status"] == "running"
 
 
-# Test the health endpoint
-def test_health():
-    client = get_test_client()
-
+def test_health(client):
     response = client.get("/health")
 
     assert response.status_code == 200
-
-    data = response.get_json()
-
-    assert data["status"] == "healthy"
+    assert response.get_json()["status"] == "healthy"
 
 
-# Test getting clients
-def test_get_clients():
-    client = get_test_client()
-
+def test_get_clients_empty(client):
     response = client.get("/clients")
 
     assert response.status_code == 200
-
     assert response.get_json() == []
 
 
-# Test adding a client
-def test_add_client():
-    client = get_test_client()
-
+def test_add_client(client):
     client_data = {
         "name": "Test User",
         "age": 25,
@@ -63,12 +58,10 @@ def test_add_client():
     assert data["name"] == "Test User"
     assert data["age"] == 25
     assert data["weight"] == 60
+    assert "id" in data
 
 
-# Test missing required field
-def test_add_client_missing_field():
-    client = get_test_client()
-
+def test_add_client_missing_field(client):
     client_data = {
         "name": "Test User",
         "age": 25
@@ -77,7 +70,61 @@ def test_add_client_missing_field():
     response = client.post("/clients", json=client_data)
 
     assert response.status_code == 400
+    assert "error" in response.get_json()
 
-    data = response.get_json()
 
-    assert "error" in data
+def test_add_client_invalid_name(client):
+    response = client.post("/clients", json={
+        "name": " ",
+        "age": 25,
+        "weight": 60
+    })
+
+    assert response.status_code == 400
+
+
+def test_add_client_invalid_age(client):
+    response = client.post("/clients", json={
+        "name": "Test User",
+        "age": -5,
+        "weight": 60
+    })
+
+    assert response.status_code == 400
+
+
+def test_add_client_invalid_weight(client):
+    response = client.post("/clients", json={
+        "name": "Test User",
+        "age": 25,
+        "weight": 0
+    })
+
+    assert response.status_code == 400
+
+
+def test_add_client_non_numeric_values(client):
+    response = client.post("/clients", json={
+        "name": "Test User",
+        "age": "abc",
+        "weight": "unknown"
+    })
+
+    assert response.status_code == 400
+
+
+def test_client_persistence(client):
+    client.post("/clients", json={
+        "name": "Persistent User",
+        "age": 28,
+        "weight": 65
+    })
+
+    response = client.get("/clients")
+
+    assert response.status_code == 200
+
+    clients = response.get_json()
+
+    assert len(clients) == 1
+    assert clients[0]["name"] == "Persistent User"
