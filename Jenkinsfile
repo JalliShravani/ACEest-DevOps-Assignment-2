@@ -13,8 +13,10 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
+                echo 'Checking out ACEest Fitness source code'
                 checkout scm
             }
         }
@@ -44,6 +46,29 @@ pipeline {
                     docker run --rm "$IMAGE_NAME:$BUILD_NUMBER" \
                       python -m pytest -v tests/
                 '''
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    def scannerHome = tool 'SonarScanner'
+
+                    withSonarQubeEnv('SonarQube') {
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate(
+                        abortPipeline: true,
+                        webhookSecretId: 'sonarqube-webhook-secret'
+                    )
+                }
             }
         }
 
@@ -95,9 +120,11 @@ pipeline {
         success {
             echo 'ACEest Fitness CI/CD pipeline completed successfully.'
         }
+
         failure {
             echo 'Pipeline failed. Check the console output.'
         }
+
         always {
             echo 'Pipeline execution finished.'
         }
