@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-shadow
+  namespace: aceest-fitness
+  labels:
+    app: aceest-shadow
+    version: shadow
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-shadow
+  template:
+    metadata:
+      labels:
+        app: aceest-shadow
+        version: shadow
+    spec:
+      containers:
+        - name: aceest-fitness
+          image: shravanijalli/aceest-fitness:latest
+          imagePullPolicy: IfNotPresent
+                    command: ["gunicorn"]
+          args:
+            - "--bind"
+            - "0.0.0.0:5000"
+            - "--workers"
+            - "2"
+            - "--access-logfile"
+            - "-"
+            - "app:app"
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DATABASE_PATH
+              value: /tmp/aceest-shadow.db
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
